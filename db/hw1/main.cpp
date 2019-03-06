@@ -50,8 +50,8 @@ void smart_transpose(int *matrix1, int *matrix2, int n) {
 int main(int argc, char **argv)
 {
     srand(time(NULL));
-    int *matrix1 = (int*) malloc(sizeof(int) * N * N);
-    int *matrix2 = (int*) malloc(sizeof(int) * N * N);
+    int *matrix1 = (int*) calloc(N * N, sizeof(int));
+    int *matrix2 = (int*) calloc(N * N, sizeof(int));
     memset(matrix2, 1, N * N * sizeof(int));
     for (int i = 0; i < N * N; ++i) {
         matrix1[i] = rand();
