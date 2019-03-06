@@ -1,6 +1,8 @@
 #include <chrono>
 #include <iostream>
 #include <unistd.h>
+#include <string.h>
+
 class Timer
 {
     using clock_t = std::chrono::high_resolution_clock;
@@ -50,6 +52,7 @@ int main(int argc, char **argv)
     srand(time(NULL));
     int *matrix1 = (int*) malloc(sizeof(int) * N * N);
     int *matrix2 = (int*) malloc(sizeof(int) * N * N);
+    memset(matrix2, 1, N * N * sizeof(int));
     for (int i = 0; i < N * N; ++i) {
         matrix1[i] = rand();
     }
