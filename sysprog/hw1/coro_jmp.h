@@ -128,6 +128,9 @@ static int curr_coro_i = 0;
     (coro)->last = clock(); \
 	(coro)->is_finished = false;				\
 	setjmp((coro)->exec_point);				\
+    if (i >= coro_count) {                   \
+        break;                              \
+    }                                           \
 	(coro)->ret_count = 0;					\
 	(coro)->ret_capacity = 0;				\
 	(coro)->ret_points = NULL;				\
