@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <time.h>
 #include "coro_jmp.h"
 
 static int coro_count;
@@ -133,6 +134,11 @@ void fmerge_sort(char *files[], int n)
 
 int main(int argc, char *argv[])
 {
+    if (argc < 2) {
+        printf("No input files\n");
+        return 0;
+    }
+    clock_t t = clock();
     coro_count = argc - 1;
     coros = calloc(coro_count, sizeof(struct coro));
     for (int i = 0; i < coro_count; ++i) {
@@ -146,5 +152,6 @@ int main(int argc, char *argv[])
     coro_wait_all();
     fmerge_sort(argv + 1, argc - 1);
     rename(argv[1], "BIG.txt");
+    printf("Program time is %ld µs\n", (clock() - t) * 1000000 / CLOCKS_PER_SEC);
     return 0;
 }
