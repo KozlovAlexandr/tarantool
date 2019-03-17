@@ -139,9 +139,6 @@ int main(int argc, char *argv[])
     coros = calloc(coro_count, sizeof(struct coro));
     for (int i = 0; i < coro_count; ++i) {
         coro_init(&coros[i]);
-        if (i >= coro_count) {
-            break;
-        }
     }
     coro_call(sort_file, argv[curr_coro_i+1]);
     coro_finish();
