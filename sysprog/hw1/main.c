@@ -36,6 +36,8 @@ void merge(int *l, int *r, int size)
         coro_this()->l[coro_this()->cnt] = coro_this()->c[coro_this()->cnt];
         coro_yield();
     }
+    free(coro_this()->c);
+    coro_yield();
     coro_return();
 }
 
@@ -78,6 +80,9 @@ void sort_file(const char *filename)
         coro_yield();
         fprintf(coro_this()->f, "%d ", coro_this()->arr[coro_this()->dummy]);
     }
+    coro_yield();
+    free(coro_this()->arr);
+    coro_yield();
     fclose(coro_this()->f);
     coro_return();
 }
