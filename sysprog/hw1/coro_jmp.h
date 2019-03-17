@@ -3,7 +3,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <assert.h>
-
+#include <time.h>
 #define CORO_LOCAL_DATA struct {				\
     int *arr, *l, *r, *c, *p1, *p2, size, sz, i, cnt, siz, dummy, *init_arr; \
     int *old_arr, old_size; \
@@ -11,7 +11,7 @@
 	int *size_points; \
 	FILE *f; \
 	const char* filename; \
-	 \
+	clock_t duration, last; \
 }
 
 /**
@@ -99,7 +99,11 @@ static int curr_coro_i = 0;
 #define coro_this() (&coros[curr_coro_i])
 
 /** Declare that this curoutine has finished. */
-#define coro_finish() ({coro_this()->is_finished = true; })
+#define coro_finish() ({ \
+    coro_this()->is_finished = true;   \
+    coro_this()->duration += clock() - coro_this()->last; \
+    printf("The duration of the coro %d is %ld µs\n", curr_coro_i, coro_this()->duration * 1000000 / CLOCKS_PER_SEC); \
+})
 
 /**
  * This macro stops the current coroutine and switches to another
@@ -111,12 +115,17 @@ static int curr_coro_i = 0;
 #define coro_yield() ({						\
 	int old_i = curr_coro_i;				\
 	curr_coro_i = (curr_coro_i + 1) % coro_count;		\
-	if (setjmp(coros[old_i].exec_point) == 0)		\
+	if (setjmp(coros[old_i].exec_point) == 0) {		\
+        coros[old_i].duration += clock() - coros[old_i].last; \
+        coros[curr_coro_i].last = clock(); \
 		longjmp(coros[curr_coro_i].exec_point, 1);	\
+    } \
 })
 
 /** Initialize a coroutine. */
 #define coro_init(coro) ({					\
+    (coro)->duration = 0; \
+    (coro)->last = clock(); \
 	(coro)->is_finished = false;				\
 	setjmp((coro)->exec_point);				\
 	(coro)->ret_count = 0;					\
