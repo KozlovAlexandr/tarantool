@@ -30,13 +30,16 @@ void my_realloc(struct cmd **cmds, int cur)
     (*cmds)[cur].argc = 0;
 }
 
-void my_free(struct cmd *cmds, int sz)
+void my_free(struct cmd *cmds, struct file f, int sz)
 {
     for (int i = 0; i < sz; ++i) {
         for (int j = 0; j < cmds[i].argc; ++j) {
             free(cmds[i].argv[j]);
         }
         free(cmds[i].argv);
+    }
+    if (f.filename) {
+        free(f.filename);
     }
     free(cmds);
 }
@@ -207,8 +210,7 @@ void parse_string(char *s, int n)
     }
     if (cmds[0].argc)
         execute(cmds, f, cur + 1);
-    my_free(cmds, cur + 1);
-
+    my_free(cmds, f, cur + 1);
 }
 
 
