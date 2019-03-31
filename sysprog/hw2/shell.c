@@ -38,9 +38,7 @@ void my_free(struct cmd *cmds, struct file f, int sz)
         }
         free(cmds[i].argv);
     }
-    if (f.filename) {
-        free(f.filename);
-    }
+    free(f.filename);
     free(cmds);
 }
 
