@@ -8,8 +8,6 @@
 #include <unistd.h>
 #include <string.h>
 
-#define ARG_MAX 10000
-
 struct cmd
 {
     char *name;
@@ -23,6 +21,30 @@ struct file
     int mode;
 };
 
+struct string
+{
+    char *ptr;
+    size_t size;
+    size_t capacity;
+};
+
+int is_special(int ch)
+{
+    return ch == ' ' || ch == '|' || ch == '>' || ch == '#';
+}
+
+void push(struct string *s, int ch)
+{
+    if (s->capacity <= s->size) {
+        s->capacity = s->capacity * 2 + 1;
+        s->ptr = realloc(s->ptr, s->capacity);
+        if (!s->ptr) {
+            exit(1);
+        }
+    }
+    s->ptr[s->size++] = ch;
+}
+
 void my_realloc(struct cmd **cmds, int cur)
 {
     *cmds = realloc(*cmds, (cur + 1) * sizeof(struct cmd));
@@ -30,7 +52,7 @@ void my_realloc(struct cmd **cmds, int cur)
     (*cmds)[cur].argc = 0;
 }
 
-void my_free(struct cmd *cmds, int sz)
+void my_free(struct cmd *cmds, struct file f, int sz)
 {
     for (int i = 0; i < sz; ++i) {
         for (int j = 0; j < cmds[i].argc; ++j) {
@@ -38,60 +60,58 @@ void my_free(struct cmd *cmds, int sz)
         }
         free(cmds[i].argv);
     }
+    free(f.filename);
     free(cmds);
 }
 
-char *my_cpy(char *begin, char *end)
+char *get_token(char *begin, char *end)
 {
     char *res = calloc(end - begin + 1, sizeof(char));
-    char *t = res;
-    while (begin < end) {
-        *t++ = *begin++;
-    }
-    *t = 0;
+    memcpy(res, begin, end - begin);
+    res[end - begin] = 0;
     return res;
 }
 
 
-void parse_word(struct cmd **cmds, char *begin, char *end, int cur)
+void parse_token(struct cmd **cmds, char *begin, char *end, int cur)
 {
-    char *s = my_cpy(begin, end);
-    (*cmds)[cur].argv = realloc((*cmds)[cur].argv, sizeof(char*) * ((*cmds)[cur].argc + 1));
-    if ((*cmds)[cur].argc == 0) {
-        (*cmds)[cur].name = s;
+    char *token = get_token(begin, end);
+    struct cmd *cur_cmd = *cmds + cur;
+    cur_cmd->argv = realloc(cur_cmd->argv, sizeof(char*) * (cur_cmd->argc + 1));
+    if (cur_cmd->argc == 0) {
+        cur_cmd->name = token;
     }
-    (*cmds)[cur].argv[(*cmds)[cur].argc++] = s;
+    cur_cmd->argv[cur_cmd->argc++] = token;
 }
 
-void parse_string_with_q(int c, char *s, int *j)
+void parse_string_in_q(int q_type, struct string *s)
 {
     int state = 0;
-    int ch = getchar();
     while (1) {
+        int ch = getchar();
         if (!state) {
             if (ch == '\\') {
                 state = 1;
-            } else if (ch == c) {
+            } else if (ch == q_type) {
                 return;
             } else {
-                s[(*j)++] = ch;
+                push(s, ch);
             }
         } else {
-            if (ch == '\\' || ch == c) {
-                s[(*j)++] = ch;
+            if (ch == '\\' || ch == q_type) {
+                push(s, ch);
             } else if (ch != '\n') {
-                s[(*j)++] = '\\';
-                s[(*j)++] = ch;
+                push(s, '\\');
+                push(s, ch);
             }
             state = 0;
         }
-        ch = getchar();
     }
 }
 
-char parse_string_without_q(char *s, int *j)
+char parse_string_without_q(struct string *s)
 {
-    int state = 0, ch;
+    int carry_flag = 0, ch;
     do {
         ch = getchar();
     } while (ch == ' ');
@@ -99,39 +119,40 @@ char parse_string_without_q(char *s, int *j)
         return  EOF;
     }
     while (1) {
-        if (!state) {
+        if (!carry_flag) {
             if (ch == '\'' || ch == '"') {
-                parse_string_with_q(ch, s, j);
+                parse_string_in_q(ch, s);
             } else if (ch == '\\') {
-                state = 1;
-            } else if (ch == '|' || ch == '>' || ch == ' ' || ch == '\n' || ch == '#') {
+                carry_flag = 1;
+            } else if (is_special(ch) || ch == '\n') {
                 return ch;
             } else {
-                s[(*j)++] = ch;
+                push(s, ch);
             }
         } else {
             if (!isspace(ch) || ch == ' ') {
-                s[(*j)++] = ch;
+                push(s, ch);
             }
-            state = 0;
+            carry_flag = 0;
         }
         ch = getchar();
     }
 }
 
-int parse_file(struct file *f, char *s, int *j)
+int parse_file(struct file *f, struct string *s)
 {
-    int ch, start = *j;
+    int ch;
+    int start = s->size;
     if ((ch = getchar()) == '>') {
         f->mode = O_APPEND;
     } else {
         f->mode = O_TRUNC;
     }
-    int res = parse_string_without_q(s, j);
+    int res = parse_string_without_q(s);
     if (f->mode == O_APPEND || ch == ' ') {
-        f->filename = my_cpy(s + start, s + *j);
+        f->filename = get_token(s->ptr + start, s->ptr + s->size);
     } else {
-        f->filename = my_cpy(s + start - 1, s + *j);
+        f->filename = get_token(s->ptr + start - 1, s->ptr + s->size);
         f->filename[0] = ch;
     }
     f->mode = f->mode | O_CREAT | O_WRONLY;
@@ -171,53 +192,51 @@ void execute(struct cmd *cmds, struct file f, int size) {
     }
 }
 
-void parse_string(char *s, int n)
+void parse_string(struct string *s)
 {
-    int j = 0, ch, start = 0, cur = 0;
+    int ch, start = 0, cur_cmd = 0;
     struct cmd *cmds = NULL;
-    my_realloc(&cmds, cur);
+    my_realloc(&cmds, cur_cmd);
     struct file f;
     f.filename = NULL;
-    while ((ch = parse_string_without_q(s, &j)) != '\n') {
+    while ((ch = parse_string_without_q(s)) != '\n') {
         if (ch == EOF) {
             free(cmds);
             exit(0);
         }
-        if ((ch == ' ' || ch == '|' || ch == '>' || ch == '#') && start != j) {
-            parse_word(&cmds, s + start, s + j, cur);
-            start = j;
+        if (is_special(ch) && start != s->size) {
+            parse_token(&cmds, s->ptr + start, s->ptr + s->size, cur_cmd);
+            start = s->size;
         }
         if (ch == '|') {
-            cur++;
-            my_realloc(&cmds, cur);
-            start = ++j;
+            my_realloc(&cmds, ++cur_cmd);
         } else if (ch == '#') {
             while ((ch = getchar()) != '\n');
             break;
         } else if (ch == '>') {
-            if (parse_file(&f, s, &j) == '\n') {
-                start = j;
+            if (parse_file(&f, s) == '\n') {
+                start = s->size;
                 break;
             }
-            start = j;
+            start = s->size;
         }
     }
-    if (start != j && !f.filename) {
-        parse_word(&cmds, s + start, s + j, cur);
+    if (start != s->size && !f.filename) {
+        parse_token(&cmds, s->ptr + start, s->ptr + s->size, cur_cmd);
     }
     if (cmds[0].argc)
-        execute(cmds, f, cur + 1);
-    my_free(cmds, cur + 1);
-
+        execute(cmds, f, cur_cmd + 1);
+    my_free(cmds, f, cur_cmd + 1);
+    s->size = 0;
 }
 
 
 int main()
 {
-    char s[ARG_MAX];
+    struct string input_str;
+    memset(&input_str, 0, sizeof(input_str));
     while (1) {
-        printf("$ ");
-        parse_string(s, 1000);
+        parse_string(&input_str);
     }
     return 0;
 }
